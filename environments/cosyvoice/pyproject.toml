@@ -27,7 +27,7 @@ dependencies = [
   "pyworld==0.3.4",
   "rich==13.7.1",
   "ruamel-yaml==0.18.16",
-  "setuptools==80.9.0",
+  "setuptools==83.0.0",
   "soundfile==0.12.1",
   "torch==2.3.1",
   "torchaudio==2.3.1",
