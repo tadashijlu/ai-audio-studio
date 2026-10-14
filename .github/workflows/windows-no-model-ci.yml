@@ -55,13 +55,28 @@ jobs:
       - name: Install no-model test dependencies
         run: python -m pip install --disable-pip-version-check --requirement .github/requirements-ci.txt
 
-      - name: Provide FFmpeg for audio pipeline tests
+      - name: Provide pinned FFmpeg for audio pipeline tests
         run: |
-          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue) -or -not (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
-            choco install ffmpeg --version=9.0.0 --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            $env:PATH = "C:\ProgramData\chocolatey\bin;$env:PATH"
+          $version = "9.0.1"
+          $archive = Join-Path $env:RUNNER_TEMP "ffmpeg-$version-essentials_build.zip"
+          $extractRoot = Join-Path $env:RUNNER_TEMP "ffmpeg-$version"
+          $url = "https://github.com/GyanD/codexffmpeg/releases/download/$version/ffmpeg-$version-essentials_build.zip"
+          curl.exe --fail --location --retry 3 --retry-all-errors --output $archive $url
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $expectedSha256 = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9"
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "FFmpeg archive SHA256 mismatch: expected $expectedSha256, got $actualSha256"
           }
+          Expand-Archive -LiteralPath $archive -DestinationPath $extractRoot
+          $bin = Join-Path $extractRoot "ffmpeg-$version-essentials_build\bin"
+          if (-not (Test-Path -LiteralPath (Join-Path $bin "ffmpeg.exe") -PathType Leaf)) {
+            throw "Pinned FFmpeg archive has an unexpected layout."
+          }
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify FFmpeg tools
+        run: |
           ffmpeg -version | Select-Object -First 1
           ffprobe -version | Select-Object -First 1
 
@@ -72,6 +87,8 @@ jobs:
           uv lock --check --project environments/cosyvoice
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv lock --check --project environments/qwen3tts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv lock --check --project environments/stableaudio
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify WebUI npm lockfile
